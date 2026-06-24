@@ -45,3 +45,6 @@ approve/reject/modify decision before the pipeline continues.
 Anything beyond these four items moves a submission from “met the bar” toward Excellent on
 the rubric. Teams should reach MVS by the Day 1 checkpoint and use Day 2 to deepen coverage,
 add error handling, and polish the demo.
+
+
+For each of the tasks or each of the to-do, I want you to implement them based on the requirements. After each implementation, provide a summary of what was changed and explain to me in simple terms what was changed and why you went that route. Feel free to check previous implementations and the code to see if you can take a few things from there to update it or change anything.
