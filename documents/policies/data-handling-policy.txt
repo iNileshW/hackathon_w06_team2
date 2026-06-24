@@ -1,0 +1,41 @@
+Departmental Data Handling Policy for FOI Responses
+
+VERSION 3.2 -- Effective from April 2024
+
+1. CLASSIFICATION
+All FOI responses must be handled at OFFICIAL classification unless the underlying information is classified at a higher level. If the requested information is OFFICIAL-SENSITIVE or above, consult the Information Asset Owner before proceeding.
+
+2. PERSONAL DATA
+Before releasing any information, check whether it contains personal data as defined under the Data Protection Act 2018. Personal data includes: names, contact details, staff numbers, job titles, performance data, disciplinary records, and any information from which an individual could be identified directly or indirectly.
+
+For requests about staffing data:
+- Aggregate statistics (e.g., total headcount by grade) are generally safe to release.
+- Individual-level data must be anonymised. Remove names, staff numbers, and any combination of fields that could identify an individual.
+- Small sample sizes (fewer than 5 individuals in a category) risk identification even with anonymisation. Consider suppressing these cells or combining categories.
+
+3. COMMERCIAL DATA
+Contract values and supplier names for awarded contracts are published proactively and can be released under FOI. However, the following are protected under Section 43:
+- Bid evaluation scores and ranking of unsuccessful bidders
+- Pricing breakdowns and unit rates
+- Supplier profit margins
+- Negotiation correspondence between the department and bidders
+
+4. INTERNAL DELIBERATIONS
+Emails, meeting notes, and memos reflecting internal policy deliberations may be protected under Section 36. Apply the public interest test:
+- Favour disclosure when: the decision has been made and announced, significant public money is involved, or there are concerns about the decision-making process.
+- Favour withholding when: disclosure would inhibit candid advice in future, the policy area is still under active deliberation, or disclosure would reveal legal advice.
+
+5. REDACTION STANDARDS
+When applying partial disclosure:
+- Use solid black redaction bars (not highlighting or strikethrough).
+- Ensure redacted text cannot be recovered from the digital file (flatten PDFs, do not use text boxes over content).
+- Label each redaction with the applicable exemption section number.
+- Produce a redaction schedule listing each redaction, the exemption applied, and a brief explanation.
+
+6. QUALITY ASSURANCE
+Every FOI response must be reviewed by a second pair of eyes before release. The reviewer checks:
+- All personal data has been identified and handled correctly
+- Exemptions are correctly cited with section numbers
+- The response is clear and addresses all parts of the request
+- The response timeline is being met (20 working days from receipt)
+- Any public interest test is documented

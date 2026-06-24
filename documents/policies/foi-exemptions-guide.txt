@@ -1,0 +1,30 @@
+Freedom of Information Act 2000 -- Exemptions Quick Reference Guide
+
+This guide summarises the most commonly applied exemptions when processing FOI requests. Staff should consult the full legislation and departmental legal advisors for complex cases.
+
+SECTION 12 -- COST LIMIT
+If the cost of complying with a request exceeds the appropriate limit (currently 18 hours of staff time, valued at 25 pounds per hour = 450 pounds for central government), the department is not obliged to comply. The department should inform the requester and offer advice on how to narrow the request.
+
+SECTION 21 -- INFORMATION ACCESSIBLE BY OTHER MEANS
+Information that the requester can reasonably obtain through other means (e.g., published on the department's website, available through another statutory scheme) is exempt. The department must tell the requester where and how they can access the information.
+
+SECTION 36 -- PREJUDICE TO EFFECTIVE CONDUCT OF PUBLIC AFFAIRS
+Information whose disclosure would prejudice the effective conduct of public affairs, including the free and frank provision of advice and the free and frank exchange of views for deliberation purposes. This is a qualified exemption and requires a public interest test.
+
+SECTION 40 -- PERSONAL INFORMATION
+Personal data about third parties is exempt if disclosure would breach any of the data protection principles under the Data Protection Act 2018 / UK GDPR. This is the most frequently applied exemption. The department must consider whether disclosure would be fair and lawful, and whether the individual would reasonably expect their information to be disclosed.
+
+SECTION 41 -- INFORMATION PROVIDED IN CONFIDENCE
+Information obtained from a third party where disclosure would constitute an actionable breach of confidence. Both the information provider and the nature of the obligation must be identified.
+
+SECTION 43 -- COMMERCIAL INTERESTS
+Information whose disclosure would, or would be likely to, prejudice the commercial interests of any person (including the department). This includes tender pricing, contract negotiation details, and trade secrets. This is a qualified exemption requiring a public interest test. Note: the fact that a contract exists and its total value are generally not exempt, but evaluation criteria, scoring, and internal deliberations may be.
+
+PUBLIC INTEREST TEST
+For qualified exemptions (sections 36 and 43), the department must weigh the public interest in disclosure against the public interest in maintaining the exemption. Factors favouring disclosure include transparency, accountability, and public understanding. Factors favouring withholding include harm to the specific interest protected by the exemption.
+
+PARTIAL DISCLOSURE
+Where some information in a document is exempt but other information is not, the department should redact the exempt portions and release the remainder. This is known as partial disclosure or redaction.
+
+RESPONSE TIMELINE
+The department must respond to FOI requests within 20 working days of receipt. If a public interest test is required, the department may extend this to a reasonable period but must notify the requester within the initial 20 days that more time is needed.
