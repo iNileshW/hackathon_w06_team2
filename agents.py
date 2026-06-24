@@ -4,10 +4,24 @@ Each agent is a function that takes typed inputs and returns a dictionary.
 The supervisor orchestrates the pipeline.
 """
 
+import json
+
 from indexer import search_policies
 from cost_tracker import CostTracker
+from langchain_anthropic import ChatAnthropic
 
 MODEL_NAME = "claude-sonnet-4-5"
+
+
+def _parse_json(content: str) -> dict:
+    """Extract a JSON object from an LLM response, tolerating ```json fences."""
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    return json.loads(text)
 
 
 def triage_agent(request_text: str, client, cost_tracker: CostTracker) -> dict:
@@ -35,11 +49,34 @@ def triage_agent(request_text: str, client, cost_tracker: CostTracker) -> dict:
         4. Handle errors: if the API call fails, return a fallback dict with
            topic="unknown", complexity="high", summary="Classification failed".
     """
-    return {
-        "topic": "unknown",
-        "complexity": "medium",
-        "summary": "Not implemented -- replace this stub.",
-    }
+    system = (
+        "You are an FOI triage officer. Classify the request below.\n"
+        "Respond with ONLY a JSON object, no prose, no markdown fences:\n"
+        '{"topic": <one of: procurement, personal-data, financial, '
+        'operational, policy, other>, '
+        '"complexity": <one of: high, medium, low>, '
+        '"summary": <one-sentence summary of what is requested>}'
+    )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": request_text},
+    ]
+    try:
+        response = client.invoke(messages)
+        cost_tracker.log_call("triage", MODEL_NAME, response.usage_metadata)
+        data = _parse_json(response.content)
+        return {
+            "topic": data.get("topic", "other"),
+            "complexity": data.get("complexity", "high"),
+            "summary": data.get("summary", ""),
+        }
+    except Exception as exc:
+        print(f"  [triage] error, using fallback: {exc}")
+        return {
+            "topic": "unknown",
+            "complexity": "high",
+            "summary": "Classification failed",
+        }
 
 
 def compliance_agent(
@@ -72,12 +109,48 @@ def compliance_agent(
         4. Log the cost with response.usage_metadata.
         5. Handle errors with a fallback.
     """
-    return {
-        "exemptions_found": [],
-        "reasoning": "Not implemented -- replace this stub.",
-        "policy_sources": [],
-        "recommendation": "release",
-    }
+    chunks = search_policies(request_text)
+    sources = sorted({c["source"] for c in chunks})
+    context = "\n\n".join(
+        f"[{c['source']}]\n{c['text']}" for c in chunks
+    ) or "(no policy excerpts retrieved)"
+
+    system = (
+        "You are an FOI compliance officer applying the Freedom of Information "
+        "Act 2000. Using ONLY the policy excerpts provided, decide which "
+        "exemptions may apply.\n"
+        "Respond with ONLY a JSON object, no prose, no markdown fences:\n"
+        '{"exemptions_found": [<section labels e.g. "s40", "s43">], '
+        '"reasoning": <why each applies or not, citing the excerpts>, '
+        '"recommendation": <one of: release, partial_release, withhold>}'
+    )
+    user = (
+        f"REQUEST:\n{request_text}\n\n"
+        f"CLASSIFICATION:\n{json.dumps(classification)}\n\n"
+        f"POLICY EXCERPTS:\n{context}"
+    )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    try:
+        response = client.invoke(messages)
+        cost_tracker.log_call("compliance", MODEL_NAME, response.usage_metadata)
+        data = _parse_json(response.content)
+        return {
+            "exemptions_found": data.get("exemptions_found", []),
+            "reasoning": data.get("reasoning", ""),
+            "policy_sources": sources,
+            "recommendation": data.get("recommendation", "withhold"),
+        }
+    except Exception as exc:
+        print(f"  [compliance] error, using fallback: {exc}")
+        return {
+            "exemptions_found": [],
+            "reasoning": "Compliance check failed",
+            "policy_sources": sources,
+            "recommendation": "withhold",
+        }
 
 
 def response_agent(
@@ -110,10 +183,41 @@ def response_agent(
         3. Log the cost with response.usage_metadata.
         4. Handle errors with a fallback.
     """
-    return {
-        "draft_response": "Not implemented -- replace this stub.",
-        "evidence_summary": "Not implemented.",
-    }
+    system = (
+        "You are an FOI response drafter. Write a formal, professional reply to "
+        "the requester under the Freedom of Information Act 2000. Reflect the "
+        "compliance recommendation: explain any exemptions applied and, where "
+        "relevant, the public interest test. Output only the letter text."
+    )
+    user = (
+        f"REQUEST:\n{request_text}\n\n"
+        f"CLASSIFICATION:\n{json.dumps(classification)}\n\n"
+        f"COMPLIANCE FINDINGS:\n{json.dumps(compliance)}"
+    )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    evidence_summary = (
+        f"Topic: {classification.get('topic')} "
+        f"(complexity: {classification.get('complexity')}). "
+        f"Exemptions: {compliance.get('exemptions_found')}. "
+        f"Recommendation: {compliance.get('recommendation')}. "
+        f"Policy sources: {compliance.get('policy_sources')}."
+    )
+    try:
+        response = client.invoke(messages)
+        cost_tracker.log_call("response", MODEL_NAME, response.usage_metadata)
+        return {
+            "draft_response": response.content,
+            "evidence_summary": evidence_summary,
+        }
+    except Exception as exc:
+        print(f"  [response] error, using fallback: {exc}")
+        return {
+            "draft_response": "[draft unavailable -- drafting failed]",
+            "evidence_summary": evidence_summary,
+        }
 
 
 def human_checkpoint(draft: dict, request_file: str) -> dict:
@@ -167,10 +271,29 @@ def supervisor(
         5. Assemble and return the full result dictionary.
         6. Wrap each step in try/except to handle failures gracefully.
     """
-    classification = triage_agent(request_text, client, cost_tracker)
-    compliance = compliance_agent(request_text, classification, client, cost_tracker)
-    draft = response_agent(request_text, classification, compliance, client, cost_tracker)
-    decision = human_checkpoint(draft, request_file)
+    try:
+        classification = triage_agent(request_text, client, cost_tracker)
+    except Exception as exc:
+        print(f"  [supervisor] triage stage failed: {exc}")
+        classification = {"topic": "unknown", "complexity": "high", "summary": "Classification failed"}
+
+    try:
+        compliance = compliance_agent(request_text, classification, client, cost_tracker)
+    except Exception as exc:
+        print(f"  [supervisor] compliance stage failed: {exc}")
+        compliance = {"exemptions_found": [], "reasoning": "Compliance check failed", "policy_sources": [], "recommendation": "withhold"}
+
+    try:
+        draft = response_agent(request_text, classification, compliance, client, cost_tracker)
+    except Exception as exc:
+        print(f"  [supervisor] response stage failed: {exc}")
+        draft = {"draft_response": "[draft unavailable]", "evidence_summary": "Drafting failed"}
+
+    try:
+        decision = human_checkpoint(draft, request_file)
+    except Exception as exc:
+        print(f"  [supervisor] checkpoint failed: {exc}")
+        decision = {"decision": "rejected", "notes": f"Checkpoint error: {exc}"}
 
     return {
         "request_file": request_file,
