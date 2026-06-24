@@ -34,13 +34,12 @@ def run_index():
 
 def run_process(target_path: str):
     """Process one or more FOI request files."""
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key or api_key == "sk-your-key-here":
-        print("Warning: OPENAI_API_KEY is not set. Agents will return placeholder output.")
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        print("Warning: ANTHROPIC_API_KEY is not set. Agents will return placeholder output.")
         print("Copy .env.example to .env and add your API key to enable LLM calls.\n")
-    # Import here so the module loads even without the openai package configured
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key or "sk-placeholder")
+    from langchain_anthropic import ChatAnthropic
+    client = ChatAnthropic(model="claude-sonnet-4-5", api_key=api_key or "placeholder")
     tracker = CostTracker()
 
     target = Path(target_path)

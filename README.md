@@ -9,7 +9,7 @@ python -m venv .venv
 source .venv/bin/activate   # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env and add your OpenAI API key
+# Edit .env and add your Anthropic API key
 ```
 
 ### Offline install (from vendored wheels)
@@ -29,7 +29,7 @@ The `vendor/wheels/` directory contains pre-built wheels for all dependencies. I
 
 ### Smoke test
 
-Run `make smoke` before the hackathon begins. It verifies that chromadb and sentence-transformers import correctly and warns if `OPENAI_API_KEY` is unset (the key is only needed for the OpenAI embedding fallback).
+Run `make smoke` before the hackathon begins. It verifies that chromadb and sentence-transformers import correctly and warns if `ANTHROPIC_API_KEY` is unset.
 
 ```bash
 make smoke
@@ -63,12 +63,6 @@ The scaffold runs out of the box but produces placeholder output. Implement the 
 
 ## HuggingFace-blocked troubleshooting
 
-If `sentence-transformers` fails to download the embedding model (403, timeout, or `HfHubHTTPError`), the HuggingFace Hub is blocked on your network. Set the fallback provider:
+If `sentence-transformers` fails to download the embedding model (403, timeout, or `HfHubHTTPError`), the HuggingFace Hub is blocked on your network.
 
-1. Edit `.env` and set `EMBEDDING_PROVIDER=openai`
-2. Ensure `OPENAI_API_KEY` is set to a valid key
-3. Re-run `make smoke`
-
-With `EMBEDDING_PROVIDER=openai`, ChromaDB uses the OpenAI embeddings API instead of the local sentence-transformers model. This requires network access to `api.openai.com` and consumes API credits.
-
-Do not set `HF_HUB_DISABLE_SSL_VERIFY=1` or bypass TLS verification. If both HuggingFace and OpenAI are blocked, contact your instructor before the session.
+**Note:** this section previously described an `EMBEDDING_PROVIDER=openai` fallback. That no longer applies now that the lab runs on an Anthropic key -- Anthropic has no public embeddings API to fall back to. If you hit this, contact your instructor before the session; do not set `HF_HUB_DISABLE_SSL_VERIFY=1` or bypass TLS verification.
