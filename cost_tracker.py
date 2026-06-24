@@ -7,8 +7,8 @@ Prints a summary at the end of a run.
 # Approximate costs per 1000 tokens (USD) as of 2025.
 # Update these if using different models.
 MODEL_COSTS = {
-    "gpt-4o": {"prompt": 0.0025, "completion": 0.01},
-    "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
+    "claude-sonnet-4-5": {"input": 0.003, "output": 0.015},
+    "claude-haiku-4-5": {"input": 0.001, "output": 0.005},
 }
 
 
@@ -23,27 +23,30 @@ class CostTracker:
 
         Args:
             agent_name: Which agent made the call (e.g., "triage", "compliance").
-            model: The model ID used (e.g., "gpt-4o-mini").
-            usage: The usage object from the OpenAI response (response.usage).
+            model: The model ID used (e.g., "claude-sonnet-4-5").
+            usage: The usage_metadata dict from a LangChain AIMessage response
+                (response.usage_metadata), with "input_tokens" and
+                "output_tokens" keys.
 
         Returns:
             A dictionary with the logged call details.
         """
-        prompt_tokens = usage.prompt_tokens if usage else 0
-        completion_tokens = usage.completion_tokens if usage else 0
+        usage = usage or {}
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
 
         # TODO: Calculate the estimated cost using MODEL_COSTS.
         # Look up the model in MODEL_COSTS. If the model is not listed,
-        # use 0.0 for both prompt and completion cost rates.
-        # Cost = (prompt_tokens / 1000) * prompt_rate + (completion_tokens / 1000) * completion_rate
+        # use 0.0 for both input and output cost rates.
+        # Cost = (input_tokens / 1000) * input_rate + (output_tokens / 1000) * output_rate
         estimated_cost = 0.0
 
         entry = {
             "agent": agent_name,
             "model": model,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
             "estimated_cost_usd": estimated_cost,
         }
         self.calls.append(entry)
@@ -55,8 +58,8 @@ class CostTracker:
         Returns:
             A dictionary with total tokens, total cost, and per-agent breakdown.
         """
-        total_prompt = sum(c["prompt_tokens"] for c in self.calls)
-        total_completion = sum(c["completion_tokens"] for c in self.calls)
+        total_input = sum(c["input_tokens"] for c in self.calls)
+        total_output = sum(c["output_tokens"] for c in self.calls)
         total_cost = sum(c["estimated_cost_usd"] for c in self.calls)
 
         by_agent = {}
@@ -70,9 +73,9 @@ class CostTracker:
 
         return {
             "total_calls": len(self.calls),
-            "total_prompt_tokens": total_prompt,
-            "total_completion_tokens": total_completion,
-            "total_tokens": total_prompt + total_completion,
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_tokens": total_input + total_output,
             "total_cost_usd": total_cost,
             "by_agent": by_agent,
         }
@@ -82,9 +85,13 @@ class CostTracker:
         s = self.summary()
         print("\n--- Cost Summary ---")
         print(f"Total calls: {s['total_calls']}")
-        print(f"Total tokens: {s['total_tokens']} (prompt: {s['total_prompt_tokens']}, completion: {s['total_completion_tokens']})")
+        print(
+            f"Total tokens: {s['total_tokens']} (input: {s['total_input_tokens']}, output: {s['total_output_tokens']})"
+        )
         print(f"Estimated cost: ${s['total_cost_usd']:.4f}")
         if s["by_agent"]:
             print("\nBy agent:")
             for agent, data in s["by_agent"].items():
-                print(f"  {agent}: {data['calls']} calls, {data['tokens']} tokens, ${data['cost_usd']:.4f}")
+                print(
+                    f"  {agent}: {data['calls']} calls, {data['tokens']} tokens, ${data['cost_usd']:.4f}"
+                )

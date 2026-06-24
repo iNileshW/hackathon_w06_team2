@@ -7,13 +7,16 @@ The supervisor orchestrates the pipeline.
 from indexer import search_policies
 from cost_tracker import CostTracker
 
+MODEL_NAME = "claude-sonnet-4-5"
+
 
 def triage_agent(request_text: str, client, cost_tracker: CostTracker) -> dict:
     """Classify an FOI request by topic and complexity.
 
     Args:
         request_text: The full text of the FOI request.
-        client: An OpenAI client instance.
+        client: A LangChain ChatAnthropic instance (or any chat model with a
+            compatible .invoke() interface).
         cost_tracker: The shared CostTracker for logging API calls.
 
     Returns:
@@ -23,10 +26,12 @@ def triage_agent(request_text: str, client, cost_tracker: CostTracker) -> dict:
         - "summary": str (one-sentence summary of what is being requested)
 
     TODO:
-        1. Call client.chat.completions.create() with a system prompt that
-           instructs the model to classify the request.
-        2. Parse the response into the return format.
-        3. Log the call with cost_tracker.log_call("triage", model, response.usage).
+        1. Build a messages list (a system message with classification
+           instructions, plus a user message containing request_text) and
+           call client.invoke(messages).
+        2. Parse response.content into the return format.
+        3. Log the call with
+           cost_tracker.log_call("triage", MODEL_NAME, response.usage_metadata).
         4. Handle errors: if the API call fails, return a fallback dict with
            topic="unknown", complexity="high", summary="Classification failed".
     """
@@ -48,7 +53,8 @@ def compliance_agent(
     Args:
         request_text: The full text of the FOI request.
         classification: The output from triage_agent().
-        client: An OpenAI client instance.
+        client: A LangChain ChatAnthropic instance (or any chat model with a
+            compatible .invoke() interface).
         cost_tracker: The shared CostTracker for logging API calls.
 
     Returns:
@@ -62,8 +68,8 @@ def compliance_agent(
         1. Call search_policies(request_text) to retrieve relevant policy chunks.
         2. Build a prompt that includes the retrieved policy text as context,
            the request text, and the classification.
-        3. Call the LLM and parse the response.
-        4. Log the cost.
+        3. Call client.invoke(messages) and parse response.content.
+        4. Log the cost with response.usage_metadata.
         5. Handle errors with a fallback.
     """
     return {
@@ -87,7 +93,8 @@ def response_agent(
         request_text: The full text of the FOI request.
         classification: The output from triage_agent().
         compliance: The output from compliance_agent().
-        client: An OpenAI client instance.
+        client: A LangChain ChatAnthropic instance (or any chat model with a
+            compatible .invoke() interface).
         cost_tracker: The shared CostTracker for logging API calls.
 
     Returns:
@@ -100,7 +107,7 @@ def response_agent(
         1. Build a prompt that includes the request, classification, and
            compliance findings.
         2. Instruct the model to draft a formal FOI response letter.
-        3. Log the cost.
+        3. Log the cost with response.usage_metadata.
         4. Handle errors with a fallback.
     """
     return {
@@ -144,7 +151,8 @@ def supervisor(
     Args:
         request_text: The full text of the FOI request.
         request_file: The filename of the request (for logging and output).
-        client: An OpenAI client instance.
+        client: A LangChain ChatAnthropic instance (or any chat model with a
+            compatible .invoke() interface).
         cost_tracker: The shared CostTracker for logging API calls.
 
     Returns:
