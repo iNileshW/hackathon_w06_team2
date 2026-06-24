@@ -20,11 +20,11 @@ Record every instance where you use AI to generate, refactor, or debug code. Fou
 | **What AI Generated** | Full bodies for `triage_agent`, `compliance_agent`, `response_agent`, and the `supervisor`. Triage sends the request to Claude (`claude-sonnet-4-5`) and parses a JSON `{topic, complexity, summary}` against a fixed topic set. Compliance calls `search_policies()`, injects the excerpts into the prompt, and returns `{exemptions_found, reasoning, policy_sources, recommendation}`. Response drafts a formal letter from the triage + compliance outputs. Supervisor runs the three in sequence. Also added a `_parse_json` helper to strip ```` ```json ```` fences. |
 | **What You Changed + Why** | Wrapped **each** supervisor stage in its own try/except with a documented fallback (not just the agents' internal handling) -- the brief requires one failing request not to crash the batch, so the orchestrator needs its own safety net. Constrained triage to a fixed topic list and instructed "JSON only, no prose" -- free-text classification is unreliable for downstream routing. Told the compliance agent to use ONLY the supplied policy excerpts -- prevents the model inventing law not in the documents. Defaulted compliance fallback to `recommendation="withhold"` -- fail safe (don't release on error). Left RAG retrieval (Req 2), the approval gate (Req 3), cost math (Req 5), and the JSON cost field (Req 6) stubbed -- scoped strictly to Req 1. |
 
-## Instance 3
+## Instance 3: Testing the Req 1 pipeline flow
 
 | Field | Detail |
 |-------|--------|
-| **Date** | |
-| **Task** | |
-| **What AI Generated** | |
-| **What You Changed + Why** | |
+| **Date** | 2026-06-24 |
+| **Task** | Verify the Req 1 multi-agent pipeline runs end to end -- confirm triage, compliance, and response all execute in order and the supervisor returns a populated result dict. |
+| **What AI Generated** | A no-key structural test: a `FakeClient` whose `.invoke()` returns canned JSON, passed to `supervisor()`, asserting the result dict contains `classification`, `compliance`, `draft_response`, and `human_decision`. Then a real run -- `python main.py index` followed by `python main.py process documents/foi_requests/request-001.txt` -- against the live Anthropic API once the key was added to `.env`. |
+| **What You Changed + Why** | Ran the mock test first before spending API tokens -- it isolates orchestration wiring from LLM behaviour, so a green mock means a red real run points at the API/key, not the supervisor. Confirmed the real run logged 3 LLM calls with no `[agent] error, using fallback` lines -- that absence is the actual pass signal, since the try/except fallbacks would otherwise hide a broken agent behind a populated-looking dict. Noted three expected non-failures and did NOT treat them as Req 1 bugs: `policy_sources: []` (indexer stub, Req 2), `$0.0000` cost (cost-calc stub, Req 5), and auto-approved checkpoint (HITL stub, Req 3) -- all out of Req 1 scope. |
