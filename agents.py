@@ -19,6 +19,19 @@ MODEL_NAME = "claude-sonnet-4-5"
 DECISION_LOG = Path(__file__).resolve().parent / "decisions.log"
 
 
+def _content_or_raise(response) -> str:
+    """Return the response text, or raise if it is empty/None.
+
+    The brief treats an empty or missing result as a failure (Req 4), so this
+    funnels that case into the same try/except that catches API errors -- the
+    agent then returns its documented fallback instead of an empty draft.
+    """
+    content = getattr(response, "content", None)
+    if content is None or not str(content).strip():
+        raise ValueError("empty or missing response content")
+    return content
+
+
 def _parse_json(content: str) -> dict:
     """Extract a JSON object from an LLM response, tolerating ```json fences."""
     text = content.strip()
@@ -70,7 +83,7 @@ def triage_agent(request_text: str, client, cost_tracker: CostTracker) -> dict:
     try:
         response = client.invoke(messages)
         cost_tracker.log_call("triage", MODEL_NAME, response.usage_metadata)
-        data = _parse_json(response.content)
+        data = _parse_json(_content_or_raise(response))
         return {
             "topic": data.get("topic", "other"),
             "complexity": data.get("complexity", "high"),
@@ -142,7 +155,7 @@ def compliance_agent(
     try:
         response = client.invoke(messages)
         cost_tracker.log_call("compliance", MODEL_NAME, response.usage_metadata)
-        data = _parse_json(response.content)
+        data = _parse_json(_content_or_raise(response))
         return {
             "exemptions_found": data.get("exemptions_found", []),
             "reasoning": data.get("reasoning", ""),
@@ -215,7 +228,7 @@ def response_agent(
         response = client.invoke(messages)
         cost_tracker.log_call("response", MODEL_NAME, response.usage_metadata)
         return {
-            "draft_response": response.content,
+            "draft_response": _content_or_raise(response),
             "evidence_summary": evidence_summary,
         }
     except Exception as exc:

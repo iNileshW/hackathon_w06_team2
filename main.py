@@ -62,7 +62,13 @@ def run_process(target_path: str):
         print(f"\nProcessing: {request_file.name}")
         request_text = request_file.read_text()
 
-        result = supervisor(request_text, request_file.name, client, tracker)
+        try:
+            result = supervisor(request_text, request_file.name, client, tracker)
+        except Exception as exc:
+            # Last-resort guard: a failure inside the supervisor must not abort
+            # the remaining requests in the batch (Req 4).
+            print(f"  [main] supervisor crashed on {request_file.name}, skipping: {exc}")
+            result = {"request_file": request_file.name, "error": str(exc)}
         results.append(result)
 
         # Write individual result file
