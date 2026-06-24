@@ -349,6 +349,10 @@ def supervisor(
         5. Assemble and return the full result dictionary.
         6. Wrap each step in try/except to handle failures gracefully.
     """
+    # Snapshot the call count so we can slice out just this request's calls
+    # for the per-request cost breakdown (the tracker is shared across the batch).
+    cost_start = len(cost_tracker.calls)
+
     try:
         classification = triage_agent(request_text, client, cost_tracker)
     except Exception as exc:
@@ -375,10 +379,19 @@ def supervisor(
         print(f"  [supervisor] checkpoint failed: {exc}")
         decision = {"decision": "reject", "notes": f"Checkpoint error: {exc}"}
 
+    # Per-request cost: only the calls this request added to the shared tracker.
+    request_calls = cost_tracker.calls[cost_start:]
+    cost_breakdown = {
+        "calls": request_calls,
+        "total_tokens": sum(c["total_tokens"] for c in request_calls),
+        "total_cost_usd": sum(c["estimated_cost_usd"] for c in request_calls),
+    }
+
     return {
         "request_file": request_file,
         "classification": classification,
         "compliance": compliance,
         "draft_response": draft,
         "human_decision": decision,
+        "cost_breakdown": cost_breakdown,
     }
