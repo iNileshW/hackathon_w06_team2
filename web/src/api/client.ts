@@ -1,7 +1,11 @@
 import type { Decision, FoiRequest } from "../types";
 
-// Relative URLs are proxied to the FastAPI backend by Vite (see vite.config.ts).
-const BASE = "/api";
+// Relative API base so calls resolve under whatever path the app is served
+// from -- mirrors how ./assets resolve. The lab proxy mounts the app under a
+// sub-path, so an absolute "/api" would miss it (404). import.meta.env.BASE_URL
+// is "./" (set by vite `base`), giving "./api"; in dev it resolves to
+// localhost:5173/api and is proxied to the backend (see vite.config.ts).
+const BASE = `${import.meta.env.BASE_URL}api`;
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {

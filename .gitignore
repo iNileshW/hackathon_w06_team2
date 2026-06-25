@@ -221,3 +221,6 @@ chroma_db/
 
 # HITL decision audit log (generated at runtime)
 decisions.log
+
+# Incremental-index manifest (generated)
+.index_manifest.json
