@@ -12,12 +12,18 @@ Endpoints:
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import pipeline
+
+# Built React app (web/dist). Served from this same server so the lab's
+# single-port proxy gets both the UI (/) and the API (/api/*) on one origin.
+DIST_DIR = Path(__file__).resolve().parent.parent / "web" / "dist"
 
 
 @asynccontextmanager
@@ -82,3 +88,11 @@ def decide_request(request_id: str, body: DecisionBody):
     if record is None:
         raise HTTPException(status_code=404, detail="request not found")
     return record
+
+
+# Mount the built SPA LAST so the explicit /api/* routes above take precedence.
+# html=True serves index.html at "/"; HashRouter handles in-app routing.
+if DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="spa")
+else:
+    print(f"[api] {DIST_DIR} not found -- run `npm run build` in web/ to serve the UI")
