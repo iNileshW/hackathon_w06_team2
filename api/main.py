@@ -12,12 +12,19 @@ Endpoints:
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import pipeline
+
+# Built React app (web/dist). Served from this same server so the lab's
+# single-port proxy gets both the UI (/) and the API (/api/*) on one origin.
+DIST_DIR = Path(__file__).resolve().parent.parent / "web" / "dist"
 
 
 @asynccontextmanager
@@ -82,3 +89,20 @@ def decide_request(request_id: str, body: DecisionBody):
     if record is None:
         raise HTTPException(status_code=404, detail="request not found")
     return record
+
+
+# Serve the built SPA without shadowing the API or the /docs + /openapi.json
+# routes. Mount hashed assets explicitly; a catch-all returns index.html for
+# any other path (HashRouter handles in-app routing). Registered LAST so the
+# /api/* routes and FastAPI's auto docs routes match first.
+if DIST_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        candidate = DIST_DIR / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(DIST_DIR / "index.html"))
+else:
+    print(f"[api] {DIST_DIR} not found -- run `npm run build` in web/ to serve the UI")
