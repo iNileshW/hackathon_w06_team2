@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "postinstall": "cp -r node_modules/govuk-frontend/dist/govuk/assets public/assets 2>/dev/null || true"
+    "postinstall": "cp -r node_modules/govuk-frontend/dist/govuk/assets public/assets 2>/dev/null || true; sed 's#/assets/##g' node_modules/govuk-frontend/dist/govuk/govuk-frontend.min.css > src/govuk.generated.css"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.7",
