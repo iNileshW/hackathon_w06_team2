@@ -4,3 +4,4 @@ public/assets/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+src/govuk.generated.css
