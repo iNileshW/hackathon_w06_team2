@@ -74,7 +74,16 @@ Record every instance where you use AI to generate, refactor, or debug code. Fou
 | **What AI Generated** | Snapshot `cost_start = len(cost_tracker.calls)` at the top of `supervisor()`, then after the pipeline slice `cost_tracker.calls[cost_start:]` and assemble `cost_breakdown = {calls, total_tokens, total_cost_usd}`, added to the returned dict alongside `request_file`, `classification`, `compliance`, `draft_response`, and `human_decision`. The other five groups and `main.py`'s JSON writing already existed. |
 | **What You Changed + Why** | Chose the snapshot-and-slice approach over having each agent return its own cost -- the `CostTracker` is shared across the whole batch, so slicing `calls[start:]` is the only way to attribute calls to ONE request without threading a per-request tracker through every agent signature. Tested the slice specifically against a **batch** run (all three requests), not just a single file: each result showed exactly its own 3 calls with distinct costs ($0.0164 / $0.0210 / $0.0263) rather than the cumulative 3/6/9 a naive global sum would have produced -- the isolation is the whole point of the requirement and the easy bug to miss. |
 
-## Instance 9: Hyperparameter evaluation harness for chunk size
+## Instance 9: Web UI -- FastAPI backend + React/GOV.UK frontend
+
+| Field | Detail |
+|-------|--------|
+| **Date** | 2026-06-25 |
+| **Task** | Build a UI to visualise the pipeline: a FastAPI backend (`api/`) wrapping the existing agents, and a React + Vite + GOV.UK Design System frontend (`web/`) using TanStack Query, with a mock LLM so the demo needs no API key. |
+| **What AI Generated** | `api/mock_client.py` (a duck-typed `MockChatClient.invoke()` returning request-aware JSON/letter content plus `usage_metadata`), `api/pipeline.py` (service layer reusing the real `triage/compliance/response` agents + RAG, holding in-memory state), and `api/main.py` (FastAPI routes + CORS + startup indexing). Frontend: typed `fetch` client, TanStack Query hooks (`useRequests`/`useProcess`/`useDecide`), a dashboard table, and a request-detail page rendering classification, compliance citations, draft letter, cost table, and an approve/reject/modify gate -- all using GOV.UK markup classes. |
+| **What You Changed + Why** | Split the human-in-the-loop gate into two HTTP phases (`process` -> `awaiting_decision` -> `decide`) because the CLI gate blocks on `input()`, which can't work over a request/response API -- the browser holds the pause instead, and `decide` writes the same timestamped `decisions.log` so the audit trail is shared with the CLI. Wired the mock client through the **real** agents rather than faking responses at the API layer, so RAG retrieval, cost tracking, and fallbacks all still execute and the demo reflects true pipeline behaviour. Reused the cost snapshot pattern from Req 6 with a fresh per-request `CostTracker` (no batch sharing here, so no slice needed). On the frontend, fixed two real build failures found by actually running `npm run build`: `tsconfig.node.json` needed `composite: true` and emit enabled for project references, and the GOV.UK CSS 404'd on `/assets/fonts` until I copied the design-system assets into `public/` via a `postinstall` step. Verified the whole stack end-to-end through the Vite proxy (process -> draft -> decide, CSS + fonts 200) before calling it done -- noted the dev server fell back to port 5174 because 5173 was already taken. |
+
+## Instance 10: Hyperparameter evaluation harness for chunk size
 
 | Field | Detail |
 |-------|--------|
