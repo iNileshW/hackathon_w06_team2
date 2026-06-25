@@ -1,0 +1,15 @@
+/* Sticky footer: header + content + footer fill at least the viewport,
+   content grows so the footer sits at the bottom on short pages. */
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1 0 auto;
+}
+
+.govuk-footer {
+  flex-shrink: 0;
+}
