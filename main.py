@@ -1,7 +1,8 @@
 """FOI Request Automation System -- Entry Point
 
 Usage:
-    python main.py index               Index policy documents into ChromaDB
+    python main.py index               Full (re)index of policy documents
+    python main.py sync [--watch]      Incrementally sync new/changed/deleted docs
     python main.py process <path>      Process FOI request(s) at <path>
 """
 
@@ -14,7 +15,7 @@ from dotenv import load_dotenv
 
 from agents import supervisor
 from cost_tracker import CostTracker
-from indexer import index_policies
+from indexer import index_policies, sync_index, watch_and_sync
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +31,20 @@ def run_index():
     print(f"Indexing policies from {POLICIES_DIR}")
     count = index_policies(str(POLICIES_DIR))
     print(f"Indexed {count} chunks")
+
+
+def run_sync(watch: bool = False):
+    """Incrementally sync the vector store with the policies folder."""
+    if watch:
+        watch_and_sync(str(POLICIES_DIR))
+        return
+    print(f"Syncing vector store with {POLICIES_DIR}")
+    summary = sync_index(str(POLICIES_DIR))
+    print(
+        f"added={summary['added']} updated={summary['updated']} "
+        f"unchanged={summary['unchanged']} removed={summary['removed']} "
+        f"-> {summary['total_chunks']} chunks"
+    )
 
 
 def run_process(target_path: str):
@@ -92,6 +107,8 @@ def main():
 
     if command == "index":
         run_index()
+    elif command == "sync":
+        run_sync(watch="--watch" in sys.argv[2:])
     elif command == "process":
         if len(sys.argv) < 3:
             print("Usage: python main.py process <path_to_requests>")
