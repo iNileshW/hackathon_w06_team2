@@ -11,9 +11,15 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
 COLLECTION_NAME = "foi_policies"
+# Persist on disk so `index` and `process` (separate processes) share the store.
+PERSIST_DIR = str(Path(__file__).resolve().parent / "chroma_db")
 
 embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-vectorstore = Chroma(collection_name=COLLECTION_NAME, embedding_function=embedder)
+vectorstore = Chroma(
+    collection_name=COLLECTION_NAME,
+    embedding_function=embedder,
+    persist_directory=PERSIST_DIR,
+)
 
 
 def chunk_text(text: str, chunk_size: int = 400, overlap: int = 80) -> list:
@@ -45,22 +51,35 @@ def index_policies(policies_dir: str) -> int:
     Returns:
         The number of chunks indexed.
 
-    TODO:
-        1. Clear out any existing collection: call vectorstore.delete_collection()
-           wrapped in a try/except Exception, then reassign the module-level
-           `vectorstore` to a fresh
-           Chroma(collection_name=COLLECTION_NAME, embedding_function=embedder).
-           You'll need `global vectorstore` since you're reassigning it.
-        2. Iterate over all .txt files in policies_dir.
-        3. For each file, read the text and chunk it with chunk_text(). For each
-           chunk, build a langchain_core.documents.Document with
-           page_content=chunk and metadata={"file": filename, "chunk_index": i}.
-        4. Once you've collected all Documents, call
-           vectorstore.add_documents(documents, ids=[...]) with one unique
-           string id per chunk (e.g. "policy_0", "policy_1", ...).
-        5. Return the total number of chunks indexed.
     """
-    return 0
+    global vectorstore
+    # Start from a clean collection so re-indexing never double-counts chunks.
+    try:
+        vectorstore.delete_collection()
+    except Exception as exc:
+        print(f"  [index] no existing collection to clear: {exc}")
+    vectorstore = Chroma(
+        collection_name=COLLECTION_NAME,
+        embedding_function=embedder,
+        persist_directory=PERSIST_DIR,
+    )
+
+    documents = []
+    ids = []
+    for path in sorted(Path(policies_dir).glob("*.txt")):
+        filename = path.name
+        for i, chunk in enumerate(chunk_text(path.read_text())):
+            documents.append(
+                Document(
+                    page_content=chunk,
+                    metadata={"file": filename, "chunk_index": i},
+                )
+            )
+            ids.append(f"{filename}-{i}")
+
+    if documents:
+        vectorstore.add_documents(documents, ids=ids)
+    return len(documents)
 
 
 def search_policies(query: str, n_results: int = 3) -> list:
@@ -74,10 +93,13 @@ def search_policies(query: str, n_results: int = 3) -> list:
         A list of dictionaries with keys "text" and "source".
         Returns an empty list if the collection has no results.
 
-    TODO:
-        1. Call vectorstore.similarity_search(query, k=n_results).
-        2. Build and return a list of
-           {"text": doc.page_content, "source": doc.metadata["file"]}
-           for each returned Document.
     """
-    return []
+    try:
+        docs = vectorstore.similarity_search(query, k=n_results)
+    except Exception as exc:
+        print(f"  [search] retrieval failed: {exc}")
+        return []
+    return [
+        {"text": doc.page_content, "source": doc.metadata.get("file", "unknown")}
+        for doc in docs
+    ]

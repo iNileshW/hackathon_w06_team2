@@ -5,12 +5,31 @@ The supervisor orchestrates the pipeline.
 """
 
 import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from indexer import search_policies
 from cost_tracker import CostTracker
 from langchain_anthropic import ChatAnthropic
 
 MODEL_NAME = "claude-sonnet-4-5"
+
+# Decision log lives next to this module so it is found regardless of CWD.
+DECISION_LOG = Path(__file__).resolve().parent / "decisions.log"
+
+
+def _content_or_raise(response) -> str:
+    """Return the response text, or raise if it is empty/None.
+
+    The brief treats an empty or missing result as a failure (Req 4), so this
+    funnels that case into the same try/except that catches API errors -- the
+    agent then returns its documented fallback instead of an empty draft.
+    """
+    content = getattr(response, "content", None)
+    if content is None or not str(content).strip():
+        raise ValueError("empty or missing response content")
+    return content
 
 
 def _parse_json(content: str) -> dict:
@@ -64,7 +83,7 @@ def triage_agent(request_text: str, client, cost_tracker: CostTracker) -> dict:
     try:
         response = client.invoke(messages)
         cost_tracker.log_call("triage", MODEL_NAME, response.usage_metadata)
-        data = _parse_json(response.content)
+        data = _parse_json(_content_or_raise(response))
         return {
             "topic": data.get("topic", "other"),
             "complexity": data.get("complexity", "high"),
@@ -136,7 +155,7 @@ def compliance_agent(
     try:
         response = client.invoke(messages)
         cost_tracker.log_call("compliance", MODEL_NAME, response.usage_metadata)
-        data = _parse_json(response.content)
+        data = _parse_json(_content_or_raise(response))
         return {
             "exemptions_found": data.get("exemptions_found", []),
             "reasoning": data.get("reasoning", ""),
@@ -209,7 +228,7 @@ def response_agent(
         response = client.invoke(messages)
         cost_tracker.log_call("response", MODEL_NAME, response.usage_metadata)
         return {
-            "draft_response": response.content,
+            "draft_response": _content_or_raise(response),
             "evidence_summary": evidence_summary,
         }
     except Exception as exc:
@@ -220,28 +239,87 @@ def response_agent(
         }
 
 
-def human_checkpoint(draft: dict, request_file: str) -> dict:
-    """Pause for human review and approval.
+def _read_decision() -> str:
+    """Prompt until the operator gives a valid approve/reject/modify choice.
+
+    Falls back to "reject" if no input stream is attached (e.g. a piped run
+    that hits EOF) -- fail safe means nothing is released without a real
+    approval.
+    """
+    valid = {
+        "a": "approve", "approve": "approve",
+        "r": "reject", "reject": "reject",
+        "m": "modify", "modify": "modify",
+    }
+    while True:
+        try:
+            raw = input("Decision [approve/reject/modify]: ").strip().lower()
+        except EOFError:
+            print("  [checkpoint] no input stream -- failing safe to reject")
+            return "reject"
+        if raw in valid:
+            return valid[raw]
+        print("  Please enter approve, reject, or modify (a/r/m).")
+
+
+def human_checkpoint(draft: dict, request_file: str, evidence_refs=None) -> dict:
+    """Pause for human review, then log a timestamped approve/reject/modify decision.
 
     Args:
-        draft: The output from response_agent().
-        request_file: The filename of the original request (for display).
+        draft: The output from response_agent() ({draft_response, evidence_summary}).
+        request_file: The filename of the original request (for display/logging).
+        evidence_refs: Policy sources / citations backing the draft (list of str).
 
     Returns:
         A dictionary with keys:
-        - "decision": str ("approved", "rejected", or "modified")
-        - "notes": str (operator's notes, empty string if none)
-
-    TODO:
-        1. Print the draft response and evidence summary to stdout.
-        2. Prompt the operator: "Decision for {request_file} [approve/reject/modify]: "
-        3. If "modify", prompt for notes.
-        4. Return the decision dictionary.
+        - "decision": str ("approve", "reject", or "modify")
+        - "notes": str (operator's notes/reason, empty string if none)
+        - "timestamp": str (UTC ISO 8601, when the decision was made)
+        - "request_id": str (request filename without extension)
+        - "evidence_refs": list of str (the citations shown to the operator)
     """
-    print(f"\n--- Review for {request_file} ---")
-    print("Draft response: [not implemented]")
-    print("Evidence: [not implemented]")
-    return {"decision": "approved", "notes": "Auto-approved (not implemented)"}
+    evidence_refs = evidence_refs or []
+    request_id = Path(request_file).stem
+
+    # 1. Show the operator everything they need to decide.
+    print(f"\n--- APPROVAL GATE: {request_file} ---")
+    print("Draft response:\n")
+    print(draft.get("draft_response", "[no draft]"))
+    print(f"\nEvidence summary: {draft.get('evidence_summary', '(none)')}")
+    print(f"Policy citations: {evidence_refs or '(none)'}")
+
+    # 2. Pause for the decision.
+    decision = _read_decision()
+
+    # 3. Collect notes: required for modify, optional reason for reject.
+    notes = ""
+    if decision == "modify":
+        try:
+            notes = input("Modification notes: ").strip()
+        except EOFError:
+            notes = ""
+    elif decision == "reject":
+        try:
+            notes = input("Reason (optional): ").strip()
+        except EOFError:
+            notes = ""
+
+    # 4. Build the decision record and append it to the timestamped log.
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "request_id": request_id,
+        "decision": decision,
+        "notes": notes,
+        "evidence_refs": evidence_refs,
+    }
+    try:
+        with open(DECISION_LOG, "a") as f:
+            f.write(json.dumps(record) + "\n")
+        print(f"  [checkpoint] decision '{decision}' logged to {DECISION_LOG.name}")
+    except Exception as exc:
+        print(f"  [checkpoint] failed to write decision log: {exc}")
+
+    return record
 
 
 def supervisor(
@@ -271,6 +349,10 @@ def supervisor(
         5. Assemble and return the full result dictionary.
         6. Wrap each step in try/except to handle failures gracefully.
     """
+    # Snapshot the call count so we can slice out just this request's calls
+    # for the per-request cost breakdown (the tracker is shared across the batch).
+    cost_start = len(cost_tracker.calls)
+
     try:
         classification = triage_agent(request_text, client, cost_tracker)
     except Exception as exc:
@@ -290,10 +372,20 @@ def supervisor(
         draft = {"draft_response": "[draft unavailable]", "evidence_summary": "Drafting failed"}
 
     try:
-        decision = human_checkpoint(draft, request_file)
+        decision = human_checkpoint(
+            draft, request_file, evidence_refs=compliance.get("policy_sources", [])
+        )
     except Exception as exc:
         print(f"  [supervisor] checkpoint failed: {exc}")
-        decision = {"decision": "rejected", "notes": f"Checkpoint error: {exc}"}
+        decision = {"decision": "reject", "notes": f"Checkpoint error: {exc}"}
+
+    # Per-request cost: only the calls this request added to the shared tracker.
+    request_calls = cost_tracker.calls[cost_start:]
+    cost_breakdown = {
+        "calls": request_calls,
+        "total_tokens": sum(c["total_tokens"] for c in request_calls),
+        "total_cost_usd": sum(c["estimated_cost_usd"] for c in request_calls),
+    }
 
     return {
         "request_file": request_file,
@@ -301,4 +393,5 @@ def supervisor(
         "compliance": compliance,
         "draft_response": draft,
         "human_decision": decision,
+        "cost_breakdown": cost_breakdown,
     }

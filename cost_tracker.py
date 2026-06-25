@@ -35,11 +35,12 @@ class CostTracker:
         input_tokens = usage.get("input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
 
-        # TODO: Calculate the estimated cost using MODEL_COSTS.
-        # Look up the model in MODEL_COSTS. If the model is not listed,
-        # use 0.0 for both input and output cost rates.
-        # Cost = (input_tokens / 1000) * input_rate + (output_tokens / 1000) * output_rate
-        estimated_cost = 0.0
+        # Look up per-1k rates; unknown models cost 0.0 (logged but not priced).
+        rates = MODEL_COSTS.get(model, {"input": 0.0, "output": 0.0})
+        estimated_cost = (
+            (input_tokens / 1000) * rates["input"]
+            + (output_tokens / 1000) * rates["output"]
+        )
 
         entry = {
             "agent": agent_name,
@@ -66,7 +67,7 @@ class CostTracker:
         for call in self.calls:
             agent = call["agent"]
             if agent not in by_agent:
-                by_agent[agent] = {"calls": 0, "tokens": 0, "cost_usd": 0.0}
+                by_agent[agent] = {"calls": 0, "tokens": 0, "cost_usd": 0.0, "model": call["model"]}
             by_agent[agent]["calls"] += 1
             by_agent[agent]["tokens"] += call["total_tokens"]
             by_agent[agent]["cost_usd"] += call["estimated_cost_usd"]
@@ -93,5 +94,6 @@ class CostTracker:
             print("\nBy agent:")
             for agent, data in s["by_agent"].items():
                 print(
-                    f"  {agent}: {data['calls']} calls, {data['tokens']} tokens, ${data['cost_usd']:.4f}"
+                    f"  {agent}: {data['model']}, {data['calls']} calls, "
+                    f"{data['tokens']} tokens, ${data['cost_usd']:.4f}"
                 )
